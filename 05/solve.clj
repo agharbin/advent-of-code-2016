@@ -4,9 +4,9 @@
 
 ;; Digestion
 
-(def md5-digester (java.security.MessageDigest/getInstance "MD5"))
+(def ^java.security.MessageDigest md5-digester (java.security.MessageDigest/getInstance "MD5"))
 
-(defn digest-string [s]
+(defn digest-string [^java.lang.String s]
   (.digest md5-digester (.getBytes s)))
 
 (defn bytes-as-hex [byte-seq]
@@ -28,7 +28,6 @@
 (defn solve [input]
   (loop [i 0
          result []]
-    (when (= 0 (mod i 100000)) (printf "Iteration: %d, found %d\n" i (count result)))
     (if (= 8 (count result))
       (apply str result)
       (let [next-input (str input i)
@@ -45,11 +44,13 @@
     (<= 0 (nth xs 2) 7)
     (not (contains? seen-positions (nth xs 2)))))
 
+(defn print-partial [result]
+  (println (apply str (for [i (range 8)] (get result i "_")))))
+
 (defn solve-2 [input]
   (loop [i 0
          result (sorted-map)
          seen-positions #{}]
-    (when (= 0 (mod i 100000)) (printf "Iteration: %d, found %d\n" i (count result)))
     (if (= 8 (count result))
       (apply str (vals result))
       (let [next-input (str input i)
@@ -57,7 +58,8 @@
         (if (valid-hash-2? seen-positions next-hash)
           (let [position (nth next-hash 2)
                 next-char (subs (bytes-as-hex next-hash) 6 7)]
+            (print-partial (assoc result position next-char))
             (recur (inc i) (assoc result position next-char) (conj seen-positions position)))
           (recur (inc i) result seen-positions))))))
 
-(solve input)
+(solve-2 input)
