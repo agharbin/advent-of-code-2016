@@ -41,7 +41,7 @@
 (defn rotated-col [c dist]
   (mod (- c dist) width))
 
-(defn row-instr-2 [initial-grid r dist]
+(defn row-instr [initial-grid r dist]
   (loop [grid initial-grid
          cols (range width)]
     (if (seq cols)
