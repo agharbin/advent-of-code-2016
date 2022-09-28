@@ -1,116 +1,77 @@
-(ns advent.2016.11
-  (:require [clojure.repl :as repl]
-            [clojure.pprint :as pp]
-            [clojure.math.combinatorics :as combo]))
+(ns advent.2016.11)
 
-(set! *warn-on-reflection* true)
+;; We represent the state of the world as a list of pairs [c g] where c is the
+;; floor where a chip currently is, and g is the corresponding generator's location.
+;; All pairs are interchangeable, so it is not necessary to track the actual material.
+;; The list is kept sorted so that functionally identical configurations test as equal.
 
-;(def materials #{:polonium :thulium :prometheum :ruthenium :cobalt :elerium :dilithium})
-(def materials #{:polonium :thulium :prometheum :ruthenium :cobalt})
-(def types #{:chip :generator})
-(def all-parts (for [m materials t types] [t m]))
-(def max-int 9999)
+;; Cases
 
 (def initial-state {
   :elevator 0
-  :floors [
-    #{[:generator :polonium] [:generator :thulium] [:chip :thulium] [:generator :prometheum] [:generator :ruthenium] [:chip :ruthenium] [:generator :cobalt] [:chip :cobalt]}
-    #{[:chip :polonium] [:chip :prometheum]}
-    #{}
-    #{}]})
+  :parts [[0 0] [0 0] [0 0] [1 0] [1 0]]})
 
 (def initial-state-2 {
   :elevator 0
-  :floors [
-    #{[:generator :polonium] [:generator :thulium] [:chip :thulium] [:generator :prometheum] [:generator :ruthenium] [:chip :ruthenium] [:generator :cobalt] [:chip :cobalt] [:chip :elerium] [:generator :elerium] [:chip :dilithium] [:generator :dilithium]}
-    #{[:chip :polonium] [:chip :prometheum]}
-    #{}
-    #{}]})
+  :parts [[0 0] [0 0] [0 0] [0 0] [0 0] [1 0] [1 0]]})
 
 (def test-case {
   :elevator 0
-  :floors [
-    #{[:chip :polonium] [:chip :prometheum]}
-    #{[:generator :polonium]}
-    #{[:generator :prometheum]}
-    #{}]})
+  :parts [[0 1] [0 2]]})
 
-(defn goal? [state]
-  (and
-    (empty? (get-in state [:floors 0]))
-    (empty? (get-in state [:floors 1]))
-    (empty? (get-in state [:floors 2]))))
+;; Logic
 
-(defn valid-floor? [xs]
-  (if (boolean (some #{:generator} (map first xs)))
-    (let [chips (filter #(= :chip (first %)) xs)
-          matching-generators (for [c chips] [:generator (second c)])]
-      (every? xs matching-generators))
-    true))
+(defn goal? [{parts :parts}]
+  (every? #{[3 3]} parts))
 
-(defn valid-state? [s]
-  (every? valid-floor? (s :floors)))
+(defn legal-state? [{parts :parts}]
+  (loop [xs parts]
+    (if (seq xs)
+      (let [[chip gen] (first xs)]
+        (if (and (not= chip gen) (some #(= chip (second %)) parts))
+          false
+          (recur (rest xs))))
+      true)))
 
-(defn possible-objects-to-take [floor-contents]
-  (into #{}
-    (concat
-      (map #(hash-set %) floor-contents)
-      (for [i floor-contents j floor-contents :when (not= i j)] #{i j}))))
+(defn to-sorted-vectors [x]
+  "Takes a sequence of integers representing part -> floor mappings and
+  restores them to the original sorted pairs representation"
+  (vec (sort (map vec (partition 2 x)))))
 
-(defn possible-moves [state]
-  (let [floor-num (state :elevator)
-        poss-next-floors (filter #(<= 0 % 3) [(dec floor-num) (inc floor-num)])
-        floor-contents (get-in state [:floors floor-num])
-        poss-objects-to-move (possible-objects-to-take floor-contents)]
-    (for [f poss-next-floors o poss-objects-to-move] [f o])))
+(defn possible-next-states [{parts :parts elevator :elevator}]
+  (let [flattened (apply vector (flatten parts))
+        indexes-at-curr-floor (filter #(= elevator (flattened %)) (range (count flattened)))
+        possible-next-floors (filter #(<= 0 % 3) [(dec elevator) (inc elevator)])
+        move-one (for [next-floor possible-next-floors
+                       i indexes-at-curr-floor]
+                   {:elevator next-floor
+                    :parts (-> flattened
+                               (assoc i next-floor)
+                               to-sorted-vectors)})
+        move-two (for [next-floor possible-next-floors
+                       i indexes-at-curr-floor
+                       j indexes-at-curr-floor :when (not= i j)]
+                   {:elevator next-floor
+                    :parts (-> flattened
+                               (assoc i next-floor)
+                               (assoc j next-floor)
+                               to-sorted-vectors)})]
+    (->> (concat move-one move-two)
+         (into #{}))))
 
-(defn next-state [state [next-floor objects-to-move]]
-  (let [current-floor (state :elevator)
-        current-floor-contents (get-in state [:floors current-floor])
-        next-floor-contents (get-in state [:floors next-floor])]
-    (-> state
-        (assoc-in [:elevator] next-floor)
-        (assoc-in [:floors current-floor] (reduce disj current-floor-contents objects-to-move))
-        (assoc-in [:floors next-floor] (reduce conj next-floor-contents objects-to-move)))))
-
-(defn floor-permutation [old->new floor]
-  (into #{} (for [[t m] floor] [t (old->new m)])))
-
-(defn state-permutation [state p]
-  (let [old->new (zipmap materials p)]
-    {:elevator (state :elevator)
-     :floors (map (partial floor-permutation old->new) (state :floors))}))
-
-(defn state-permutations [state]
-  (let [material-permutations (combo/permutations materials)
-        permuted-states (map #(state-permutation state %) material-permutations)]
-     (into #{} permuted-states)))
-
-(defn solve [start-state]
+(defn bfs [start-state]
   (loop [q (conj clojure.lang.PersistentQueue/EMPTY [0 start-state])
-         shortest-path-seen max-int
-         seen-states #{}
-         i 0]
-    (if (seq q)
+         seen-states #{}]
+    (when (seq q)
       (let [[dist state] (peek q)]
-        (comment
-        (when (zero? (mod i 100))
-          (do
-            (printf "iteration(%d) seen(%d)\n" i (count seen-states))
-            (pp/pprint state)))
-        )
-        (if (some seen-states (state-permutations state))
-          (recur (pop q) shortest-path-seen seen-states (inc i))
-          (let [possible-moves (possible-moves state)
-                possible-next-states (map #(next-state state %) possible-moves)
-                valid-next-states (filter #(and (valid-state? %)
-                                                (not-any? seen-states (state-permutations %)))
-                                          possible-next-states)]
-            (recur
-              (reduce conj (pop q) (for [s valid-next-states] [(inc dist) s]))
-              (if (goal? state) (min shortest-path-seen dist) shortest-path-seen)
-              (conj seen-states state)
-              (inc i)))))
-      shortest-path-seen)))
+        (cond
+          (goal? state) dist
+          (seen-states state) (recur (pop q) seen-states)
+          :else
+            (let [states-to-consider (possible-next-states state)
+                  legal-next-states (filter legal-state? states-to-consider)]
+              (recur
+                (into (pop q) (for [s legal-next-states] [(inc dist) s]))
+                (conj seen-states state))))))))
 
-(prn (solve initial-state))
+(prn (bfs initial-state))
