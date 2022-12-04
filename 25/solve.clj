@@ -29,23 +29,22 @@
 
 (def non-zero? (complement zero?))
 
-(defn run-program [instructions a]
-  (loop [rs {:a a :b 0 :c 0 :d 0}
-         ic 0
-         c 12
-         b []]
-    (if (zero? c) b
-    (if-let [instruction (get is ic)]
+(defn run-program [instructions initial-a]
+  (loop [rs {:a initial-a :b 0 :c 0 :d 0} ; registers
+         ic 0                             ; instruction counter
+         b []]                            ; output buffer
+    (if (= 12 (count b)) b
+    (if-let [instruction (get instructions ic)]
       (m/match instruction
-        [:cpyrr x y] (recur (assoc rs y (rs x))    (inc ic)                                       c       b)
-        [:cpyir x y] (recur (assoc rs y x)         (inc ic)                                       c       b)
-        [:inc x]     (recur (update-in rs [x] inc) (inc ic)                                       c       b)
-        [:dec x]     (recur (update-in rs [x] dec) (inc ic)                                       c       b)
-        [:jnzrr x y] (recur rs                     (if (non-zero? (rs x)) (+ ic (rs y)) (inc ic)) c       b)
-        [:jnzri x y] (recur rs                     (if (non-zero? (rs x)) (+ ic y) (inc ic))      c       b)
-        [:jnzir x y] (recur rs                     (if (non-zero? x) (+ ic (rs y)) (inc ic))      c       b)
-        [:jnzii x y] (recur rs                     (if (non-zero? x) (+ ic y) (inc ic))           c       b)
-        [:out x]     (recur rs                     (inc ic)                                       (dec c) (conj b (rs x))))
+        [:cpyrr x y] (recur (assoc rs y (rs x))    (inc ic)                                       b)
+        [:cpyir x y] (recur (assoc rs y x)         (inc ic)                                       b)
+        [:inc x]     (recur (update-in rs [x] inc) (inc ic)                                       b)
+        [:dec x]     (recur (update-in rs [x] dec) (inc ic)                                       b)
+        [:jnzrr x y] (recur rs                     (if (non-zero? (rs x)) (+ ic (rs y)) (inc ic)) b)
+        [:jnzri x y] (recur rs                     (if (non-zero? (rs x)) (+ ic y) (inc ic))      b)
+        [:jnzir x y] (recur rs                     (if (non-zero? x) (+ ic (rs y)) (inc ic))      b)
+        [:jnzii x y] (recur rs                     (if (non-zero? x) (+ ic y) (inc ic))           b)
+        [:out x]     (recur rs                     (inc ic)                                       (conj b (rs x))))
       rs))))
 
 (def input (-> (slurp "input.dat") parse-input))
